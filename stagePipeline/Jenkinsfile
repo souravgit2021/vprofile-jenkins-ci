@@ -17,9 +17,10 @@ pipeline {
         NEXUS_LOGIN = 'nexuslogin'
         SONARSERVER = 'sonarserver'
         SONARSCANNER = 'sonarscanner'
-        registryCredential = 'ecr:us-east-2:awscreds'
-        appRegistry = '102512866166.dkr.ecr.us-east-2.amazonaws.com/vpro-app-image-repo'
-        vprofileRegistry = "https://102512866166.dkr.ecr.us-east-2.amazonaws.com"
+        AWS_REGION = "us-east-2"
+        ACCOUNT_ID = "102512866166"
+        ECR_REPO = "vpro-app-image-repo"
+        IMAGE_TAG = "${BUILD_NUMBER}"
     }
 
     stages {
@@ -96,23 +97,25 @@ pipeline {
             }
         }
 
-        stage('Build App Image') {
+        stage('Build Docker Image') {
             steps {
                 script {
-                    dockerImage = docker.build( appRegistry + ":$BUILD_NUMBER", "./Docker-files/app/multistage/")
+                    dockerImage = docker.build(
+                      "${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG}",
+                      "./Docker-files/app/multistage/"
+                    )
                 }
             }
         }
         
-        stage('Upload App Image') {
-          steps{
-            script {
-              docker.withRegistry( vprofileRegistry, registryCredential ) {
-                dockerImage.push("$BUILD_NUMBER")
-                dockerImage.push('latest')
-              }
+        stage('Push to ECR') {
+            steps {
+                sh """
+                aws ecr get-login-password --region ${AWS_REGION} | \
+                docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+                docker push ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:${IMAGE_TAG}
+                """
             }
-          }
         }
 
 
